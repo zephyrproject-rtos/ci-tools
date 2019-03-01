@@ -221,6 +221,9 @@ class Codeowners(ComplianceTest):
     def parse_codeowners(self, git_root, codeowners):
         all_files = []
         with open(codeowners, "r") as codeo:
+            if self.commit_range != CURRENT_COMMIT_RANGE:
+                logging.warning("Checking %s range against current %s file" %
+                                (self.commit_range, codeowners))
             for line in codeo.readlines():
                 if not line.startswith("#") and line != "\n":
                     match = re.match("([^\s]+)\s+(.*)", line)
@@ -614,6 +617,7 @@ def report_to_github(repo, pull_request, sha, suite, docs):
 
     return comment_count
 
+CURRENT_COMMIT_RANGE = "HEAD~1.."
 
 def parse_args():
     """
@@ -622,9 +626,9 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(
         description="Check for coding style and documentation warnings.")
-    parser.add_argument('-c', '--commits', default="HEAD~1..",
-                        help='''Commit range in the form: a..[b], default is
-                        HEAD~1..HEAD''')
+    parser.add_argument('-c', '--commits', default=CURRENT_COMMIT_RANGE,
+                        help='Commit range in the form: a..[b], default is %s'
+                        % CURRENT_COMMIT_RANGE)
     parser.add_argument('-g', '--github', action="store_true",
                         help="Send results to github as a comment.")
 
