@@ -156,6 +156,9 @@ class KconfigCheck(ComplianceTest):
         os.environ["BOARD_DIR"] = "boards/*/*"
         os.environ["ARCH"] = "*"
         os.environ["PROJECT_BINARY_DIR"] = tempfile.gettempdir()
+        os.environ["PYTHON_EXECUTABLE"] = os.path.normpath(sys.executable)
+        os.environ["KCONFIG_CONFIG"] = "dummy"
+        os.environ["KERNELVERSION"] = "dummy"
         os.environ['GENERATED_DTS_BOARD_CONF'] = "dummy"
 
         # For multi repo support
@@ -164,6 +167,16 @@ class KconfigCheck(ComplianceTest):
         # Enable strict Kconfig mode in Kconfiglib, which assumes there's just a
         # single Kconfig tree and warns for all references to undefined symbols
         os.environ["KCONFIG_STRICT"] = "y"
+
+        kconfig_env_var_list_path = os.path.join(self.zephyr_base, "cmake/kconfig_env_vars.txt")
+        kconfig_env_vars = set(open(kconfig_env_var_list_path).read().splitlines())
+
+        missing_vars = kconfig_env_vars.difference(os.environ) 
+        if missing_vars:
+            self.case.result = Failure("error environmental variables {1} listed in {0} "
+                                       "are not declared in check_compliance.py".format(
+                                       kconfig_env_var_list_path, missing_vars), "failure")
+            return
 
         try:
             kconf = kconfiglib.Kconfig()
