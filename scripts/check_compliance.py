@@ -29,6 +29,10 @@ def info(what):
 def error(what):
     sys.stderr.write(Fore.RED + what + Style.RESET_ALL + "\n")
 
+def warning(what):
+    sys.stdout.write(Fore.YELLOW + what + Style.RESET_ALL + "\n")
+    sys.stdout.flush()
+
 sh_special_args = {
     '_tty_out': False,
     '_cwd': os.getcwd()
@@ -82,7 +86,7 @@ class ComplianceTest:
         """
         self.case = MyCase(self._name)
         self.case.classname = "Guidelines"
-        print("Running {} tests...".format(self._name))
+        info("- Running {} tests...".format(self._name))
 
     def run(self):
         """
@@ -529,10 +533,10 @@ def init_logs(cli_arg):
 
 
 
-def set_status(repo, sha):
+def set_status(repo_name, sha):
     """
     Set status on Github
-    :param repo:  repoistory name
+    :param repo_name:  repoistory name
     :param sha:  pull request HEAD SHA
     :return:
     """
@@ -542,22 +546,22 @@ def set_status(repo, sha):
     github_token = os.environ['GH_TOKEN']
     github_conn = Github(github_token)
 
-    repo = github_conn.get_repo(repo)
+    repo = github_conn.get_repo(repo_name)
     commit = repo.get_commit(sha)
     for testcase in ComplianceTest.__subclasses__():
         test = testcase(None, "")
-        print("Creating status for %s" % (test._name))
+        info("Creating status for %s" % (test._name))
         commit.create_status('pending',
                              '%s' % test._doc,
                              'Checks in progress',
                              '{}'.format(test._name))
 
 
-def report_to_github(repo, pull_request, sha, suite, docs):
+def report_to_github(repo_name, pull_request, sha, suite, docs, dryrun):
     """
     Report test results to Github
 
-    :param repo: repo name
+    :param repo_name: repo name
     :param pull_request:  pull request number
     :param sha:  pull request SHA
     :param suite:  Test suite
@@ -565,38 +569,46 @@ def report_to_github(repo, pull_request, sha, suite, docs):
     :return: nothing
     """
 
-    if 'GH_TOKEN' not in os.environ:
-        return
-
     username = os.environ.get('GH_USERNAME', 'zephyrbot')
+    github_token = os.environ.get('GH_TOKEN', None)
+    repo = None
+    gh_pr = None
+    commit = None
 
-    github_token = os.environ['GH_TOKEN']
-    github_conn = Github(github_token)
 
-    repo = github_conn.get_repo(repo)
-    gh_pr = repo.get_pull(pull_request)
-    commit = repo.get_commit(sha)
+    if not dryrun:
+        if github_token:
+            github_conn = Github(github_token)
+        else:
+            error("No github token")
+            return
+
+        repo = github_conn.get_repo(repo_name)
+        gh_pr = repo.get_pull(pull_request)
+        commit = repo.get_commit(sha)
 
     comment = "Found the following issues, please fix and resubmit:\n\n"
     comment_count = 0
 
-    print("Processing results...")
+    info("- Processing results and reporting to Github:")
 
     for case in suite:
         if not case.result:
-            print("reporting success on %s" %case.name)
-            commit.create_status('success',
-                                 docs[case.name],
-                                 'Checks passed',
-                                 '{}'.format(case.name))
+            info("  - reporting success on %s" %case.name)
+            if commit:
+                commit.create_status('success',
+                                     docs[case.name],
+                                     'Checks passed',
+                                     '{}'.format(case.name))
         elif case.result.type in ['skipped']:
-            print("reporting skipped on %s" %case.name)
-            commit.create_status('success',
-                                 docs[case.name],
-                                 'Checks skipped',
-                                 '{}'.format(case.name))
+            info("  - reporting skipped on %s" %case.name)
+            if commit:
+                commit.create_status('success',
+                                     docs[case.name],
+                                     'Checks skipped',
+                                     '{}'.format(case.name))
         elif case.result.type in ['failure']:
-            print("reporting failure on %s" %case.name)
+            error("  - reporting failure on %s" %case.name)
             comment_count += 1
             comment += ("## {}\n".format(case.result.message))
             comment += "\n"
@@ -606,43 +618,57 @@ def report_to_github(repo, pull_request, sha, suite, docs):
             if case.name not in ['Gitlint', 'Identity/Emails', 'License']:
                 comment += "```\n"
 
-            commit.create_status('failure',
-                                 docs[case.name],
-                                 'Checks failed',
-                                 '{}'.format(case.name))
+            if commit:
+                commit.create_status('failure',
+                                     docs[case.name],
+                                     'Checks failed',
+                                     '{}'.format(case.name))
         elif case.result.type in ['error']:
-            print("reporting error on %s" %case.name)
-            commit.create_status('error',
-                                 docs[case.name],
-                                 'Error during verification, please report!',
-                                 '{}'.format(case.name))
+            error("  - reporting error on %s" %case.name)
+            if commit:
+                commit.create_status('error',
+                                     docs[case.name],
+                                     'Error during verification, please report!',
+                                     '{}'.format(case.name))
         else:
-            print("Unhandled status")
+            warning("  - Unhandled status")
 
 
-    if not repo and not pull_request:
+    if not repo and not pull_request and not dryrun:
         return comment_count
 
-    if comment_count > 0:
-        comments = gh_pr.get_issue_comments()
-        commented = False
-        for cmnt in comments:
-            if ('Found the following issues, please fix and resubmit' in cmnt.body or
-                '**All checks are passing now.**' in cmnt.body) and cmnt.user.login == username:
-                if cmnt.body != comment:
-                    cmnt.edit(comment)
-                commented = True
-                break
-
-        if not commented:
-            gh_pr.create_issue_comment(comment)
+    if dryrun:
+        info("\nComment to be posted on Github:\n")
+        info("-----------------------------------")
+        info(comment)
+        info("-----------------------------------")
     else:
-        comments = gh_pr.get_issue_comments()
-        for cmnt in comments:
-            if 'Found the following issues, please fix and resubmit' in cmnt.body and cmnt.user.login == username:
-                cmnt.edit("**All checks are passing now.**\n\nReview history of this comment for details about previous failed status.\n"
-                          "Note that some checks might have not completed yet.")
-                break
+        if comment_count > 0:
+            comments = gh_pr.get_issue_comments()
+            commented = False
+            for cmnt in comments:
+                if ('Found the following issues, please fix and resubmit' in cmnt.body or
+                    '**All checks are passing now.**' in cmnt.body) and cmnt.user.login == username:
+                    if cmnt.body != comment:
+                        cmnt.edit(comment)
+                    commented = True
+                    break
+
+            if not commented:
+                gh_pr.create_issue_comment(comment)
+        else:
+            comments = gh_pr.get_issue_comments()
+            comment_match = 'Found the following issues, please fix and resubmit'
+            for cmnt in comments:
+                if comment_match in cmnt.body and cmnt.user.login == username:
+                    cmnt.edit("""
+**All checks are passing now.**
+
+Review history of this comment for details about previous failed status.
+Note that some checks might have not completed yet.
+""")
+                    break
+
 
     return comment_count
 
@@ -675,6 +701,9 @@ def parse_args():
     parser.add_argument('-l', '--list', action="store_true",
                         help="List all test modules.")
 
+    parser.add_argument('-n', '--dryrun', action="store_true",
+                        help="Dryrun, do not post anything to github.")
+
     parser.add_argument("-v", "--loglevel", help="python logging level")
 
     parser.add_argument('-m', '--module', action="append", default=[],
@@ -705,7 +734,7 @@ def main():
     if args.list:
         for testcase in ComplianceTest.__subclasses__():
             test = testcase(None, "")
-            print("{}".format(test._name))
+            info("{}".format(test._name))
         sys.exit(0)
 
     if args.status and args.sha is not None and args.repo:
@@ -713,7 +742,7 @@ def main():
         sys.exit(0)
 
     if not args.commits:
-        print("No commit range given.")
+        error("No commit range given.")
         sys.exit(1)
 
 
@@ -739,7 +768,7 @@ def main():
             if test._name not in args.module:
                 continue
         elif test._name in args.exclude_module:
-            print("Skipping " + test._name)
+            info("Skipping " + test._name)
             continue
 
         try:
@@ -759,8 +788,8 @@ def main():
     # file to draw a better line between developer code versus
     # infrastructure-specific code, in other words keep this file
     # 100% testable and maintainable by non-admins developers.
-    if args.github and 'GH_TOKEN' in os.environ:
-        errors = report_to_github(args.repo, args.pull_request, args.sha, suite, docs)
+    if args.github:
+        errors = report_to_github(args.repo, args.pull_request, args.sha, suite, docs, args.dryrun)
     else:
         for case in suite:
             if case.result:
@@ -775,7 +804,7 @@ def main():
         errors = len(failed_cases)
 
     if errors:
-        print("{} checks failed".format(errors))
+        error("{} checks failed".format(errors))
         for case in failed_cases:
             # not clear why junitxml doesn't clearly expose the most
             # important part of its underlying etree.Element
@@ -783,7 +812,7 @@ def main():
             errmsg = errmsg.strip() if errmsg else case.result.message
             logging.error("Test %s failed: %s", case.name, errmsg)
 
-    print("\nComplete results in %s" % args.output)
+    info("\nComplete results in %s" % args.output)
     sys.exit(errors)
 
 if __name__ == "__main__":
