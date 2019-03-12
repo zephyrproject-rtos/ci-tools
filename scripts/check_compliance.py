@@ -205,6 +205,7 @@ class KconfigCheck(ComplianceTest):
         os.environ["ARCH_DIR"] = "arch/"
         os.environ["BOARD_DIR"] = "boards/*/*"
         os.environ["ARCH"] = "*"
+        os.environ["CMAKE_BINARY_DIR"] = tempfile.gettempdir()
         os.environ["PROJECT_BINARY_DIR"] = tempfile.gettempdir()
         os.environ['GENERATED_DTS_BOARD_CONF'] = "dummy"
 
