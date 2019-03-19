@@ -1,3 +1,4 @@
 /scripts/check_compliance.py				@nashif
 /scripts/what_changed.py                                @nashif
+/scripts/pylintrc                                       @ulfalizer @mbolivar
 /CODEOWNERS						@nashif
