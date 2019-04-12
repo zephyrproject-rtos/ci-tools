@@ -401,6 +401,7 @@ UNDEF_KCONFIG_WHITELIST = {
     "CONFIG_REG1",
     "CONFIG_REG2",
     "CONFIG_SEL",
+    "CONFIG_SHIFT", #From STM32MP1 Cube (ext/hal/), file stm32mp1xx_ll_rcc.h
     "CONFIG_SOC_SERIES_",
     "CONFIG_SOC_WATCH",  # Issue 13749
     "CONFIG_SOME_BOOL",
