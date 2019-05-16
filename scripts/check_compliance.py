@@ -612,10 +612,6 @@ class License(ComplianceTest):
         # copyfile() below likely requires that getcwd()==GIT_TOP
         self.prepare(os.getcwd())
 
-        scancode = "/opt/scancode-toolkit/scancode"
-        if not os.path.exists(scancode):
-            self.skip("scancode-toolkit not installed")
-
         os.makedirs("scancode-files", exist_ok=True)
         # git diff's output doesn't depend on the current (sub)directory
         new_files = git("diff", "--name-only", "--diff-filter=A",
@@ -632,7 +628,7 @@ class License(ComplianceTest):
             copyfile(file, copy)
 
         try:
-            cmd = [scancode, '--verbose', '--copyright', '--license', '--license-diag', '--info',
+            cmd = ['scancode', '--verbose', '--copyright', '--license', '--license-diag', '--info',
                    '--classify', '--summary', '--html', 'scancode.html', '--json', 'scancode.json', 'scancode-files/']
 
             cmd_str = " ".join(cmd)
