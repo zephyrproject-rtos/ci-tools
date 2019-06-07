@@ -1,2 +1,3 @@
 /scripts/check_compliance.py				@nashif
+/scripts/what_changed.py                                @nashif
 /CODEOWNERS						@nashif
