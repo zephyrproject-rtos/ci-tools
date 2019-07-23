@@ -454,6 +454,18 @@ UNDEF_KCONFIG_WHITELIST = {
 }
 
 
+class FooCheck(ComplianceTest):
+    """
+    Runs the dtlib and edtlib test suites in scripts/dts/.
+    """
+    _name = "Device tree"
+    _doc = "https://docs.zephyrproject.org/latest/guides/dts/index.html"
+
+    def run(self):
+        scripts_path = os.path.join(ZEPHYR_BASE, "scripts", "dts")
+        self.prepare(scripts_path)
+
+
 class Codeowners(ComplianceTest):
     """
     Check if added files have an owner.
