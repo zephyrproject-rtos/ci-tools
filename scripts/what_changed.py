@@ -244,13 +244,6 @@ def main():
                 "labels": ["area: Bluetooth"]
                 },
             {
-                "area": "Bluetooth Mesh",
-                "regex" : ["^subsys/bluetooth/mesh"],
-                "counter": 0,
-                "labels": ["area: Bluetooth Mesh"]
-                },
- 
-            {
                 "area": "API",
                 "regex" : ["^include/"],
                 "counter": 0,
