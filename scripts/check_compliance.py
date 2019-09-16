@@ -692,13 +692,17 @@ class PyLint(ComplianceTest):
         # Path to pylint configuration file
         pylintrc = os.path.join(os.path.dirname(__file__), "pylintrc")
 
-        # List of .py files added/modified by the commit(s).
+        # List of .py files added/modified by the commit(s). We also search for
+        # changes to some files that are known to be Python despite not ending
+        # in .py.
         #
         # Skip create_board_img.py to work around a crash in pylint 2.2.2:
         # https://github.com/PyCQA/pylint/issues/2906
         py_files = git(
             "diff", "--name-only", "--diff-filter=d", self.commit_range,
             "--", "*.py",
+            "scripts/footprint/compare_footprint",
+            "scripts/footprint/size_report",
             ":!boards/xtensa/intel_s1000_crb/support/create_board_img.py") \
             .splitlines()
 
@@ -905,6 +909,7 @@ def set_pending():
             'pending', testcase._doc,
             'Run in progress (build no. {})'.format(build_number),
             testcase._name)
+
 
 def report_test_results_to_github(suite):
     # Reports test results to Github.
