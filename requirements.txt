@@ -11,6 +11,7 @@ kconfiglib==10.30.0
 PyGithub==1.43.3
 PyJWT==1.7.1
 python-dateutil==2.7.5
+python-magic==0.4.15
 requests==2.20.1
 sh==1.11
 six==1.11.0
