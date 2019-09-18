@@ -11,7 +11,7 @@ import os
 from email.utils import parseaddr
 import logging
 import argparse
-from junitparser import TestCase, TestSuite, JUnitXml, Skipped, Error, Failure, Attr
+from junitparser import TestCase, TestSuite, JUnitXml, Skipped, Error, Failure
 from github import Github
 from shutil import copyfile
 import json
@@ -63,56 +63,51 @@ GIT_TOP = git("rev-parse", "--show-toplevel")
 
 
 def get_shas(refspec):
-    """
-    Returns the list of Git SHAs for 'refspec'.
+    # Returns the list of Git SHAs for 'refspec'
 
-    :param refspec:
-    :return:
-    """
     return git('rev-list',
                '--max-count={}'.format(-1 if "." in refspec else 1),
                refspec).split()
 
 
-class MyCase(TestCase):
-    """
-    Implementation of TestCase specific to our tests.
-
-    """
-    classname = Attr()
-    doc = Attr()
-
-
 class ComplianceTest:
     """
-    Main Test class
+    Base class for tests. Inheriting classes should have a run() method and set
+    these class variables:
 
+      name:
+        Test name
+
+      doc:
+        Link to documentation related to what's being tested
+
+      path:
+        The path the test runs in. This is just informative. The value is only
+        used in messages.
+
+      quote_fails:
+        If True, failure output from the test will be put in a code block (```)
+        in messages on GitHub
     """
+    def __init__(self):
+        self.fail_msg = ""
+        self.info_msg = ""
+        self.skip_msg = ""
+        self.error_msg = ""
 
-    _name = ""
-    _title = ""
-    _doc = "https://docs.zephyrproject.org/latest/contribute/"
+    def add_failure(self, msg):
+        """
+        Signals that the test failed, with message 'msg'. Can be called many
+        times within the same test to report multiple failures.
+        """
+        if self.fail_msg:
+            self.fail_msg += "\n\n"
+        self.fail_msg += msg
 
-    def __init__(self, suite, commit_range):
-        self.case = None
-        self.suite = suite
-        self.commit_range = commit_range
-        # get() defaults to None if not present
-
-    def prepare(self, where):
-        """
-        Prepare test case
-        :return:
-        """
-        self.case = MyCase(self._name)
-        self.case.classname = "Guidelines"
-        print("Running {:16} tests in {} ...".format(self._name, where))
-
-    def run(self):
-        """
-        Run testcase
-        :return:
-        """
+    def add_info(self, msg):
+        if self.info_msg:
+            self.info_msg += "\n\n"
+        self.info_msg += msg
 
     def error(self, msg):
         """
@@ -125,11 +120,7 @@ class ComplianceTest:
         in the message. Usually, any failures would indicate problems with the
         test code.
         """
-        if self.case.result:
-            msg += "\n\nFailures before error: " + self.case.result._elem.text
-
-        self.case.result = Error(msg, "error")
-
+        self.error_msg = msg
         raise EndTest
 
     def skip(self, msg):
@@ -143,25 +134,27 @@ class ComplianceTest:
         in the message. Usually, any failures would indicate problems with the
         test code.
         """
-        if self.case.result:
-            msg += "\n\nFailures before skip: " + self.case.result._elem.text
-
-        self.case.result = Skipped(msg, "skipped")
-
+        self.skip_msg = msg
         raise EndTest
 
-    def add_failure(self, msg):
+    def to_junit_testcase(self):
         """
-        Signals that the test failed, with message 'msg'. Can be called many
-        times within the same test to report multiple failures.
+        Returns a junitparser TestCase instance for the test. Should be called
+        after the test has been run().
         """
-        if not self.case.result:
-            # First reported failure
-            self.case.result = Failure(self._name + " issues", "failure")
-            self.case.result._elem.text = msg.rstrip()
-        else:
-            # If there are multiple Failures, concatenate their messages
-            self.case.result._elem.text += "\n\n" + msg.rstrip()
+        junit_testcase = TestCase(self.name)
+        junit_testcase.classname = "Guidelines"
+
+        if self.error_msg:
+            junit_testcase.result = Error(self.error_msg, "error")
+        elif self.fail_msg:
+            failure = Failure(self.name + " issues", "failure")
+            failure._elem.text = self.fail_msg
+            junit_testcase.result = failure
+        elif self.skip_msg:
+            junit_testcase.result = Skipped(self.skip_msg, "skipped")
+
+        return junit_testcase
 
 
 class EndTest(Exception):
@@ -176,13 +169,13 @@ class EndTest(Exception):
 class CheckPatch(ComplianceTest):
     """
     Runs checkpatch and reports found issues
-
     """
-    _name = "checkpatch"
-    _doc = "https://docs.zephyrproject.org/latest/contribute/#coding-style"
+    name = "checkpatch"
+    doc = "https://docs.zephyrproject.org/latest/contribute/#coding-style"
+    path = GIT_TOP
+    quote_fails = True
 
     def run(self):
-        self.prepare(GIT_TOP)
         # Default to Zephyr's checkpatch if ZEPHYR_BASE is set
         checkpatch = os.path.join(ZEPHYR_BASE or GIT_TOP, 'scripts',
                                   'checkpatch.pl')
@@ -190,7 +183,7 @@ class CheckPatch(ComplianceTest):
             self.skip(checkpatch + " not found")
 
         # git diff's output doesn't depend on the current (sub)directory
-        diff = subprocess.Popen(('git', 'diff', '%s' % (self.commit_range)),
+        diff = subprocess.Popen(('git', 'diff', commit_range),
                                 stdout=subprocess.PIPE)
         try:
             subprocess.check_output((checkpatch, '--mailback', '--no-tree', '-'),
@@ -209,12 +202,12 @@ class KconfigCheck(ComplianceTest):
     Checks is we are introducing any new warnings/errors with Kconfig,
     for example using undefiend Kconfig variables.
     """
-    _name = "Kconfig"
-    _doc = "https://docs.zephyrproject.org/latest/guides/kconfig/index.html"
+    name = "Kconfig"
+    doc = "https://docs.zephyrproject.org/latest/guides/kconfig/index.html"
+    path = ZEPHYR_BASE
+    quote_fails = True
 
     def run(self):
-        self.prepare(ZEPHYR_BASE)
-
         kconf = self.parse_kconfig()
 
         self.check_top_menu_not_too_long(kconf)
@@ -471,11 +464,12 @@ class DeviceTreeCheck(ComplianceTest):
     """
     Runs the dtlib and edtlib test suites in scripts/dts/.
     """
-    _name = "Device tree"
-    _doc = "https://docs.zephyrproject.org/latest/guides/dts/index.html"
+    name = "Device tree"
+    doc = "https://docs.zephyrproject.org/latest/guides/dts/index.html"
+    quote_fails = True
+    path = ZEPHYR_BASE
 
     def run(self):
-        self.prepare(ZEPHYR_BASE)
         if not ZEPHYR_BASE:
             self.skip("Not a Zephyr tree (ZEPHYR_BASE unset)")
 
@@ -519,8 +513,10 @@ class Codeowners(ComplianceTest):
     """
     Check if added files have an owner.
     """
-    _name = "Codeowners"
-    _doc  = "https://help.github.com/articles/about-code-owners/"
+    name = "Codeowners"
+    doc = "https://help.github.com/articles/about-code-owners/"
+    path = GIT_TOP
+    quote_fails = True
 
     def ls_owned_files(self, codeowners):
         """Returns an OrderedDict mapping git patterns from the CODEOWNERS file
@@ -587,7 +583,6 @@ class Codeowners(ComplianceTest):
         return ret
 
     def run(self):
-        self.prepare(GIT_TOP)
         # TODO: testing an old self.commit range that doesn't end
         # with HEAD is most likely a mistake. Should warn, see
         # https://github.com/zephyrproject-rtos/ci-tools/pull/24
@@ -596,10 +591,10 @@ class Codeowners(ComplianceTest):
             self.skip("CODEOWNERS not available in this repo")
 
         name_changes = git("diff", "--name-only", "--diff-filter=ARCD",
-                            self.commit_range)
+                           commit_range)
 
-        owners_changes = git("diff", "--name-only", self.commit_range,
-                             "--", codeowners)
+        owners_changes = git("diff", "--name-only", commit_range, "--",
+                             codeowners)
 
         if not name_changes and not owners_changes:
             # TODO: 1. decouple basic and cheap CODEOWNERS syntax
@@ -614,7 +609,7 @@ class Codeowners(ComplianceTest):
         # however if one is missed then it will always be reported as an
         # Addition instead.
         new_files = git("diff", "--name-only", "--diff-filter=ARC",
-                        self.commit_range).splitlines()
+                        commit_range).splitlines()
         logging.debug("New files %s", new_files)
 
         # Convert to pathlib.Path string representation (e.g.,
@@ -649,37 +644,35 @@ class Codeowners(ComplianceTest):
 class Documentation(ComplianceTest):
     """
     Checks if documentation build has generated any new warnings.
-
     """
-    _name = "Documentation"
-    _doc = "https://docs.zephyrproject.org/latest/guides/documentation/index.html"
-
-    DOCS_WARNING_FILE = "doc.warnings"
+    name = "Documentation"
+    doc = "https://docs.zephyrproject.org/latest/guides/documentation/index.html"
+    path = os.getcwd()
+    quote_fails = True
 
     def run(self):
-        self.prepare(os.getcwd())
+        warnings_file = "doc.warnings"
 
-        if os.path.exists(self.DOCS_WARNING_FILE) and os.path.getsize(self.DOCS_WARNING_FILE) > 0:
-            with open(self.DOCS_WARNING_FILE, "rb") as docs_warning:
-                self.add_failure(docs_warning.read().decode("utf-8"))
+        if os.path.exists(warnings_file) and os.path.getsize(warnings_file) > 0:
+            with open(warnings_file, "r", encoding="utf-8") as docs_warning:
+                self.add_failure(docs_warning.read())
 
 
 class GitLint(ComplianceTest):
     """
     Runs gitlint on the commits and finds issues with style and syntax
-
     """
-    _name = "Gitlint"
-    _doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
+    name = "Gitlint"
+    doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
+    path = os.path.join(os.getcwd(), '[.gitlint]')
+    quote_fails = False
 
     def run(self):
-        self.prepare(GIT_TOP)
-
         # By default gitlint looks for .gitlint configuration only in
         # the current directory
-        proc = subprocess.Popen('gitlint --commits %s' % (self.commit_range),
+        proc = subprocess.Popen(('gitlint', '--commits', commit_range),
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                shell=True, cwd=GIT_TOP)
+                                cwd=GIT_TOP)
 
         msg = ""
         if proc.wait() != 0:
@@ -694,18 +687,18 @@ class PyLint(ComplianceTest):
     Runs pylint on all .py files, with a limited set of checks enabled. The
     configuration is in the pylintrc file.
     """
-    _name = "pylint"
-    _doc = "https://www.pylint.org/"
+    name = "pylint"
+    doc = "https://www.pylint.org/"
+    quote_fails = True
+    path = ZEPHYR_BASE
 
     def run(self):
-        self.prepare(ZEPHYR_BASE)
-
         # Path to pylint configuration file
         pylintrc = os.path.join(os.path.dirname(__file__), "pylintrc")
 
         # List of files added/modified by the commit(s).
         files = git(
-            "diff", "--name-only", "--diff-filter=d", self.commit_range, "--",
+            "diff", "--name-only", "--diff-filter=d", commit_range, "--",
             # Currently being overhauled. Will be checked later.
             ":!scripts/sanitycheck",
             # Skip to work around crash in pylint 2.2.2:
@@ -751,14 +744,14 @@ def filter_py(fnames):
 class License(ComplianceTest):
     """
     Checks for licenses in new files added by the Pull request
-
     """
-    _name = "License"
-    _doc = "https://docs.zephyrproject.org/latest/contribute/#licensing"
+    name = "License"
+    doc = "https://docs.zephyrproject.org/latest/contribute/#licensing"
+    path = os.getcwd()
+    quote_fails = False
 
     def run(self):
         # copyfile() below likely requires that getcwd()==GIT_TOP
-        self.prepare(os.getcwd())
 
         scancode = "/opt/scancode-toolkit/scancode"
         if not os.path.exists(scancode):
@@ -767,7 +760,7 @@ class License(ComplianceTest):
         os.makedirs("scancode-files", exist_ok=True)
         # git diff's output doesn't depend on the current (sub)directory
         new_files = git("diff", "--name-only", "--diff-filter=A",
-                        self.commit_range).splitlines()
+                        commit_range).splitlines()
 
         if not new_files:
             return
@@ -854,15 +847,16 @@ class Identity(ComplianceTest):
     """
     Checks if Emails of author and signed-off messages are consistent.
     """
-    _name = "Identity/Emails"
-    _doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
+    name = "Identity/Emails"
+    doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
+    path = GIT_TOP
+    quote_fails = False
 
     def run(self):
         # git rev-list and git log don't depend on the current
         # (sub)directory unless explicited.
-        self.prepare(GIT_TOP)
 
-        for shaidx in get_shas(self.commit_range):
+        for shaidx in get_shas(commit_range):
             commit = git("log", "--decorate=short", "-n 1", shaidx)
             signed = []
             author = ""
@@ -924,77 +918,83 @@ def set_pending():
     # Sets 'pending' status for all tests for the commit given by --sha
 
     for testcase in ComplianceTest.__subclasses__():
-        print("Creating pending status for " + testcase._name)
+        print("Creating pending status for " + testcase.name)
         github_commit.create_status(
-            'pending', testcase._doc,
+            'pending', testcase.doc,
             'Run in progress (build no. {})'.format(build_number),
-            testcase._name)
+            testcase.name)
 
-def report_test_results_to_github(suite):
-    # Reports test results to Github.
-    #
-    #   suite: Test suite
 
-    fail_msg = "**Some checks failed. Please fix and resubmit.**\n\n"
-    n_failures = 0
+def report_test_results_to_github(tests):
+    # Reports test results to Github. 'test_results' is a list of Test
+    # instances for tests that have been run.
 
-    print("reporting results to GitHub")
-
-    name2doc = {testcase._name: testcase._doc
+    name2doc = {testcase.name: testcase.doc
                 for testcase in ComplianceTest.__subclasses__()}
 
     def set_commit_status(status, msg):
         # 'case' gets set in the loop.
         # pylint: disable=undefined-loop-variable
         github_commit.create_status(
-            status, name2doc[case.name],
-            "{} (build no. {})".format(msg, build_number),
-            case.name)
+            status, name2doc[test.name],
+            "{} (build no. {})".format(msg, build_number), test.name)
 
-    for case in suite:
-        if not case.result:
-            print("reporting success on " + case.name)
-            set_commit_status('success', 'Checks passed')
-        elif case.result.type == 'skipped':
-            print("reporting skipped on " + case.name)
-            set_commit_status('success', 'Checks skipped')
-        elif case.result.type == 'failure':
-            print("reporting failure on " + case.name)
-            n_failures += 1
-            fail_msg += "## {}\n\n".format(case.result.message)
-            msg = case.result._elem.text
-            if case.name not in {"Gitlint", "Identity/Emails", "License"}:
-                msg = "```\n" + msg + "\n```"
-            fail_msg += msg + "\n\n"
-            set_commit_status('failure', 'Checks failed')
-        elif case.result.type == 'error':
-            print("reporting error on " + case.name)
-            n_failures += 1
-            fail_msg += "## {} (internal test error)\n\n```\n{}\n```\n\n" \
-                        .format(case.name, case.result.message)
+    msg = ""  # Message posted to GitHub
+    failed = False
+
+    for test in tests:
+        github_comment(str(test))  # TODO: remove
+        if test.error_msg:
+            failed = True
+            msg += "## {} (internal test error)\n\n```\n{}\n```\n\n" \
+                   .format(test.name, test.error_msg)
             set_commit_status(
                 'error', 'Error during verification, please report!')
+        elif test.fail_msg:
+            failed = True
+            msg += "## {} (failures)\n\n".format(test.name)
+            if test.quote_fails:
+                msg += "```\n" + test.fail_msg + "\n```"
+            else:
+                msg += test.fail_msg
+            msg += "\n\n"
+            set_commit_status('failure', 'Checks failed')
+        elif test.skip_msg:
+            set_commit_status('success', 'Checks skipped')
         else:
-            print("Unhandled status")
+            set_commit_status('success', 'Checks passed')
 
-    if n_failures > 0:
-        github_comment(fail_msg + EDIT_TIP)
-    elif get_bot_comment():
-        # Only post a success message if a message was posted by the bot
-        # previously (probably with a failure message). We edit the old
-        # message.
-        github_comment("**All checks are passing now.**" + EDIT_TIP)
+        # Always show any informative messages
+        if test.info_msg:
+            msg += "## {} (informative)\n\n```\n{}\n```\n\n" \
+                   .format(test.name, test.info_msg)
 
-    return n_failures
+    if failed:
+        github_comment(
+            "**Some checks failed. Please fix and resubmit.**\n\n" + msg)
+    elif msg or get_bot_comment():
+        if get_bot_comment():
+            # Post a success message if a message was posted by the bot
+            # previously (probably with a failure message), even if no test
+            # case generated any output. We edit the old message.
+            github_comment("**All checks are passing now.**" + msg)
+        else:
+            # Tests succeeded right away, but some tests generated informative
+            # messages (e.g. CheckPatch). Show them.
+            github_comment(
+                "**All checks passed, but see messages below.**" + msg)
 
 
 def github_comment(msg):
     # Posts 'msg' to GitHub, or edits the previous message posted by the bot if
-    # it has already posted a message
+    # it has already posted a message. Automatically adds a message with a tip
+    # re. the bot editing the message.
 
     if not github_pr:
         # No pull request to post the message in
         return
+
+    msg += EDIT_TIP
 
     bot_comment = get_bot_comment()
     if bot_comment:
@@ -1107,23 +1107,36 @@ def init_github(args):
             "connecting to GitHub")
 
 
-def _main(args):
-    # The "real" main(), which is wrapped to catch exceptions and report them
-    # to GitHub. Returns the number of test failures.
+def run_tests(args):
+    # Runs all (enabled) tests, returning a list of ComplianceTest instances
+    # for the finished tests. 'args' is the parsed command-line arguments.
 
-    init_logs(args.loglevel)
+    tests = []
 
-    if args.list:
-        for testcase in ComplianceTest.__subclasses__():
-            print(testcase._name)
-        return 0
+    for testcase in ComplianceTest.__subclasses__():
+        if args.module:
+            if testcase.name not in args.module:
+                continue
+        elif testcase.name in args.exclude_module:
+            print("Skipping " + testcase.name)
+            continue
 
-    if args.status:
-        set_pending()
-        return 0
+        test = testcase()
+        try:
+            print("Running {:16} tests in {} ..."
+                  .format(test.name, test.path))
+            test.run()
+        except EndTest:
+            pass
+        tests.append(test)
 
-    if not args.commits:
-        err("No commit range given")
+    return tests
+
+
+def write_xml(args, tests):
+    # Writes compliance.xml. 'args' is the parsed command-line arguments, and
+    # 'tests' a list of Test instances for tests that have been run. Returns
+    # True on success and False on failure.
 
     if args.previous_run:
         if not os.path.exists(args.previous_run):
@@ -1134,7 +1147,7 @@ def _main(args):
             # sys.exit() (which gets caught in main()).
             print("error: '{}' not found".format(args.previous_run),
                   file=sys.stderr)
-            return 1
+            return False
 
         logging.info("Loading previous results from " + args.previous_run)
         for loaded_suite in JUnitXml.fromfile(args.previous_run):
@@ -1143,58 +1156,54 @@ def _main(args):
     else:
         suite = TestSuite("Compliance")
 
-    for testcase in ComplianceTest.__subclasses__():
-        test = testcase(suite, args.commits)
-        if args.module:
-            if test._name not in args.module:
-                continue
-        elif test._name in args.exclude_module:
-            print("Skipping " + test._name)
-            continue
-
-        try:
-            test.run()
-        except EndTest:
-            pass
-
-        suite.add_testcase(test.case)
+    for test in tests:
+        suite.add_testcase(test.to_junit_testcase())
 
     xml = JUnitXml()
     xml.add_testsuite(suite)
     xml.update_statistics()
     xml.write(args.output, pretty=True)
 
-    failed_cases = []
+    return True
 
-    # TODO maybe: move all the github-related code to a different .py
-    # file to draw a better line between developer code versus
-    # infrastructure-specific code, in other words keep this file
-    # 100% testable and maintainable by non-admins developers.
+
+def _main(args):
+    # The "real" main(), which is wrapped to catch exceptions and report them
+    # to GitHub. Returns the number of test failures.
+
+    # The commit range passed in --commit, e.g. 'HEAD~3..'
+    global commit_range
+
+    init_logs(args.loglevel)
+
+    if args.list:
+        for testcase in ComplianceTest.__subclasses__():
+            print(testcase.name)
+        return 0
+
+    if args.status:
+        set_pending()
+        return 0
+
+    commit_range = args.commits
+    if not commit_range:
+        err("No commit range given")
+
+    tests = run_tests(args)
+
     if args.github:
-        n_fails = report_test_results_to_github(suite)
-    else:
-        for case in suite:
-            if case.result:
-                if case.result.type == 'skipped':
-                    logging.warning("Skipped %s, %s", case.name, case.result.message)
-                else:
-                    failed_cases.append(case)
-            else:
-                # Some checks like codeowners can produce no .result
-                logging.info("No JUnit result for %s", case.name)
+        report_test_results_to_github(tests)
 
-        n_fails = len(failed_cases)
-
-    if n_fails:
-        print("{} checks failed".format(n_fails))
-        for case in failed_cases:
-            # not clear why junitxml doesn't clearly expose the most
-            # important part of its underlying etree.Element
-            errmsg = case.result._elem.text
-            logging.error("Test %s failed: %s", case.name,
-                          errmsg.strip() if errmsg else case.result.message)
+    if not write_xml(args, tests):
+        return 1
 
     print("\nComplete results in " + args.output)
+
+    # Return number of failures
+    n_fails = 0
+    for test in tests:
+        if test.fail_msg or test.error_msg:
+            n_fails += 1
     return n_fails
 
 
@@ -1215,8 +1224,7 @@ def main():
         if args.github:
             github_comment(
                 "**Internal CI Error.**\n\nPython exception in `{}`:\n\n"
-                "```\n{}\n```{}"
-                .format(__file__, traceback.format_exc(), EDIT_TIP))
+                "```\n{}\n```".format(__file__, traceback.format_exc()))
 
         raise
 
