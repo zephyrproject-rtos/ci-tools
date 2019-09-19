@@ -513,7 +513,9 @@ class DeviceTreeCheck(ComplianceTest):
         scripts_path = os.path.join(ZEPHYR_BASE, "scripts", "dts")
 
         sys.path.insert(0, scripts_path)
+        logger.info("cd %s && ./testdtlib.py" % scripts_path)
         import testdtlib
+        logger.info("cd %s && ./testedtlib.py" % scripts_path)
         import testedtlib
 
         # Hack: The test suites expect to be run from the scripts/dts
@@ -528,7 +530,7 @@ class DeviceTreeCheck(ComplianceTest):
         try:
             testdtlib.run()
             testedtlib.run()
-        except SystemExit as e:
+        except Exception as e:
             # The dtlib and edtlib test suites call sys.exit() on failure,
             # which raises SystemExit. Let any errors in the test scripts
             # themselves trickle through and turn into an internal CI error.
