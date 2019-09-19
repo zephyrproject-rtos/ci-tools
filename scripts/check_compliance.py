@@ -1061,6 +1061,11 @@ def github_comment(msg):
         github_pr.create_issue_comment(msg)
 
 
+# Cache used by get_bot_comment(). Use 0 instead of None for "no cached value"
+# so that None (no comment) can be cached.
+cached_bot_comment = 0
+
+
 def get_bot_comment():
     # Returns any previous comment posted by the bot in 'github_pr', or None if
     # the bot hasn't posted any comment (or there's no pull request)
@@ -1083,11 +1088,6 @@ def get_bot_comment():
     if cached_bot_comment == 0:
         cached_bot_comment = get_comment()
     return cached_bot_comment
-
-
-# Cache used by get_bot_comment(). Use 0 instead of None for "no cached value"
-# so that None (no comment) can be cached.
-cached_bot_comment = 0
 
 
 def parse_args():
