@@ -57,8 +57,11 @@ score=no
 #   logging-fstring-interpolation
 
 disable=all
-# Identifiers are in the same order as in 'pylint3 --list-msgs'
+# Identifiers are in the same order as in 'pylint3 --list-msgs'. Entire
+# message "types" (~= severities) like F(atal), E(error),... are listed
+# first.
 enable=
+    F, # atal
     empty-docstring,
     unneeded-not,
     singleton-comparison,
