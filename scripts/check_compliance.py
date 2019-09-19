@@ -723,7 +723,7 @@ class PyLint(ComplianceTest):
     _doc = "https://www.pylint.org/"
 
     def run(self):
-        self.prepare(ZEPHYR_BASE)
+        self.prepare(GIT_TOP)
 
         # Path to pylint configuration file
         pylintrc = os.path.join(os.path.dirname(__file__), "pylintrc")
@@ -738,8 +738,10 @@ class PyLint(ComplianceTest):
             ":!boards/xtensa/intel_s1000_crb/support/create_board_img.py") \
             .splitlines()
 
-        # Filter out everything but Python files
-        py_files = filter_py(files)
+        # Filter out everything but Python files. Keep filenames
+        # relative (to GIT_TOP) to stay farther from any command line
+        # limit.
+        py_files = filter_py(GIT_TOP, files)
         if not py_files:
             return
 
@@ -751,7 +753,7 @@ class PyLint(ComplianceTest):
                 pylintcmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                cwd=ZEPHYR_BASE)
+                cwd=GIT_TOP)
         except FileNotFoundError:
             self.error("pylint not found. Check that the directory it's in is "
                        "listed in the PATH environment variable.")
@@ -764,15 +766,17 @@ class PyLint(ComplianceTest):
             self.add_failure(stdout.decode("utf-8") + stderr.decode("utf-8"))
 
 
-def filter_py(fnames):
+def filter_py(root, fnames):
     # PyLint check helper. Returns all Python script filenames among the
-    # filenames in 'fnames'. Uses the python-magic library, so that we can
-    # detect Python files that don't end in .py as well. python-magic is a
-    # frontend to libmagic, which is also used by 'file'.
+    # filenames in 'fnames', relative to directory 'root'. Uses the
+    # python-magic library, so that we can detect Python files that
+    # don't end in .py as well. python-magic is a frontend to libmagic,
+    # which is also used by 'file'.
 
     return [fname for fname in fnames
             if fname.endswith(".py") or
-               magic.from_file(fname, mime=True) == "text/x-python"]
+               magic.from_file(os.path.join(root, fname),
+                               mime=True) == "text/x-python"]
 
 
 class License(ComplianceTest):
