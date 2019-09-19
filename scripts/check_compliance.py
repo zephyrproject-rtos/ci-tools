@@ -721,7 +721,7 @@ class PyLint(ComplianceTest):
     _doc = "https://www.pylint.org/"
 
     def run(self):
-        self.prepare(ZEPHYR_BASE)
+        self.prepare(os.getcwd())
 
         # Path to pylint configuration file
         pylintrc = os.path.join(os.path.dirname(__file__), "pylintrc")
