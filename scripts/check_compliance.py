@@ -531,7 +531,9 @@ class DeviceTreeCheck(ComplianceTest):
         old_dir = os.getcwd()
         os.chdir(scripts_path)
         try:
+            logger.info("cd %s && ./testdtlib.py", scripts_path)
             testdtlib.run()
+            logger.info("cd %s && ./testedtlib.py", scripts_path)
             testedtlib.run()
         except SystemExit as e:
             # The dtlib and edtlib test suites call sys.exit() on failure,
@@ -744,10 +746,12 @@ class PyLint(ComplianceTest):
         if not py_files:
             return
 
+        pylintcmd = ["pylint", "--rcfile=" + pylintrc] + py_files
+        logger.info(" ".join(shlex.quote(word) for word in pylintcmd))
         try:
             # Run pylint on added/modified Python files
             process = subprocess.Popen(
-                ["pylint", "--rcfile=" + pylintrc] + py_files,
+                pylintcmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 cwd=ZEPHYR_BASE)
