@@ -354,10 +354,10 @@ entries, then bump the 'max_top_items' variable in {}.
         """
         # Grep for symbol references.
         #
-        # Example output line for a reference to CONFIG_BAZ at line 17 of
+        # Example output line for a reference to CONFIG_FOO at line 17 of
         # foo/bar.c:
         #
-        #   foo/bar.c<null>17<null>#ifdef CONFIG_BAZ
+        #   foo/bar.c<null>17<null>#ifdef CONFIG_FOO
         #
         # 'git grep --only-matching' would get rid of the surrounding context
         # ('#ifdef '), but it was added fairly recently (second half of 2018),
@@ -449,6 +449,7 @@ flagged.
 # Many of these are symbols used as examples. Note that the list is sorted
 # alphabetically, and skips the CONFIG_ prefix.
 UNDEF_KCONFIG_WHITELIST = {
+    "ALSO_MISSING",
     "APP_LINK_WITH_",
     "CDC_ACM_PORT_NAME_",
     "CLOCK_STM32_SYSCLK_SRC_",
@@ -468,6 +469,7 @@ UNDEF_KCONFIG_WHITELIST = {
     "FOO_SETTING_2",
     "LIS2DW12_INT_PIN",
     "LSM6DSO_INT_PIN",
+    "MISSING",
     "MODULES",
     "MYFEATURE",
     "MY_DRIVER_0",
