@@ -732,8 +732,6 @@ class PyLint(ComplianceTest):
         # List of files added/modified by the commit(s).
         files = git(
             "diff", "--name-only", "--diff-filter=d", self.commit_range, "--",
-            # Currently being overhauled. Will be checked later.
-            ":!scripts/sanitycheck",
             # Skip to work around crash in pylint 2.2.2:
             # https://github.com/PyCQA/pylint/issues/2906
             ":!boards/xtensa/intel_s1000_crb/support/create_board_img.py") \
