@@ -876,15 +876,12 @@ class License(ComplianceTest):
                         report += ("* {} missing copyright.\n".format(orig_path))
 
         if report != "":
-            self.add_info("""
-This is just an FYI for maintainers. In most cases you do not need to do
-anything here, especially if the files reported below are going into ext/ and
-the license was approved for inclusion into ext/ already. Fix any missing
-license/copyright issues.
-
-A compact format is encouraged, to avoid too much boilerplate in files.
-
-""" + report)
+            self.add_failure("""
+In most cases you do not need to do anything here, especially if the files
+reported below are going into ext/ and if license was approved for inclusion
+into ext/ already. Fix any missing license/copyright issues. The license
+exception if a JFYI for the maintainers and can be overriden when merging the
+pull request.\n\n""" + report)
 
 
 class Identity(ComplianceTest):
