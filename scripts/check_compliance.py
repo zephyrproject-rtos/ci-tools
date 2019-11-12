@@ -507,14 +507,6 @@ class DeviceTreeCheck(ComplianceTest):
         if not ZEPHYR_BASE:
             self.skip("Not a Zephyr tree (ZEPHYR_BASE unset)")
 
-        # The dtlib/edtlib test suites rely on dictionaries preserving
-        # insertion order. They don't before Python 3.6. The code could be
-        # updated to use collections.OrderedDict to work around it, but I'm not
-        # sure it's worth it with Python 3.6 starting to get old (released
-        # December 2016).
-        if sys.version_info < (3, 6, 0):
-            self.skip("The dtlib/edtlib test suites require Python 3.6+")
-
         scripts_path = os.path.join(ZEPHYR_BASE, "scripts", "dts")
 
         sys.path.insert(0, scripts_path)
