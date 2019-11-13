@@ -366,18 +366,14 @@ entries, then bump the 'max_top_items' variable in {}.
         #
         #  - *, meant for comments like '#endif /* CONFIG_FOO_* */
         #
-        # We skip the samples/ and tests/ directories for now. They often
-        # contain Kconfig files that are not part of the main Kconfig tree,
-        # which will trigger false positives until we do something fancier.
-        #
-        # We also skip doc/releases, which often references removed symbols.
+        # We skip doc/releases, which often references removed symbols.
 
         # Warning: Needs to work with both --perl-regexp and the 're' module
         regex = r"\bCONFIG_[A-Z0-9_]+\b(?!\s*##|[$@{*])"
 
         grep_cmd = ["git", "grep", "--line-number", "-I", "--null",
                     "--perl-regexp", regex,
-                    "--", ":!samples", ":!tests", ":!doc/releases"]
+                    "--", ":!doc/releases"]
 
         grep_process = subprocess.Popen(grep_cmd,
                                         stdout=subprocess.PIPE,
@@ -393,7 +389,7 @@ entries, then bump the 'max_top_items' variable in {}.
                        .format(" ".join(grep_cmd), grep_process.returncode,
                                grep_stdout, grep_stderr))
 
-        defined_syms = set(sym.name for sym in kconf.unique_defined_syms)
+        defined_syms = get_defined_syms(kconf)
         undef_to_locs = collections.defaultdict(list)
 
         # splitlines() supports various line terminators
@@ -436,6 +432,41 @@ flagged.
 {}""".format(os.path.basename(__file__), undef_desc))
 
 
+def get_defined_syms(kconf):
+    # Returns all defined Kconfig symbols. This is complicated by samples and
+    # tests defining their own Kconfig trees. For those, just grep for
+    # 'config FOO' to find definitions. Doing it "properly" with Kconfiglib is
+    # still useful for the main tree, because some symbols are defined using
+    # preprocessor macros.
+
+    # Warning: Needs to work with both --extended-regexp and the 're' module
+    regex = "^\s*(menu)?config\s*([A-Z0-9_]+)\s*(#|$)"
+
+    grep_cmd = ["git", "grep", "-I", "-h", "--extended-regexp", regex,
+                "--", ":samples", ":tests"]
+
+    grep_process = subprocess.Popen(grep_cmd,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    cwd=ZEPHYR_BASE)
+
+    grep_stdout, grep_stderr = grep_process.communicate()
+    # Fail if there's anything on stderr too, so that it doesn't get missed
+    if grep_process.returncode or grep_stderr:
+        self.error("'{}' failed with exit code {} (while searching for "
+                   "Kconfig symbol definitions)\n\nstdout:\n{}\n\n"
+                   "stderr:\n{}"
+                   .format(" ".join(grep_cmd), grep_process.returncode,
+                           grep_stdout, grep_stderr))
+
+    res = set(sym.name for sym in kconf.unique_defined_syms)
+
+    for def_line in grep_stdout.decode("utf-8").splitlines():
+        res.add(re.match(regex, def_line).group(2))
+
+    return res
+
+
 # Many of these are symbols used as examples. Note that the list is sorted
 # alphabetically, and skips the CONFIG_ prefix.
 UNDEF_KCONFIG_WHITELIST = {
@@ -444,6 +475,7 @@ UNDEF_KCONFIG_WHITELIST = {
     "CDC_ACM_PORT_NAME_",
     "CLOCK_STM32_SYSCLK_SRC_",
     "CMU",
+    "BT_6LOWPAN",  # Defined in Linux, mentioned in docs
     "COUNTER_RTC_STM32_CLOCK_SRC",
     "CRC",  # Used in TI CC13x2 / CC26x2 SDK comment
     "DEEP_SLEEP",  # #defined by RV32M1 in ext/
@@ -469,6 +501,7 @@ UNDEF_KCONFIG_WHITELIST = {
     "PEDO_THS_MIN",
     "REG1",
     "REG2",
+    "SAMPLE_MODULE_LOG_LEVEL",  # Used as an example in samples/subsys/logging
     "SEL",
     "SHIFT",
     "SOC_WATCH",  # Issue 13749
@@ -476,6 +509,7 @@ UNDEF_KCONFIG_WHITELIST = {
     "SOME_INT",
     "SOME_OTHER_BOOL",
     "SOME_STRING",
+    "SRAM2",  # Referenced in a comment in samples/application_development
     "STACK_SIZE",  # Used as an example in the Kconfig docs
     "STD_CPP",  # Referenced in CMake comment
     "TEST1",
