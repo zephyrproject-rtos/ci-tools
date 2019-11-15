@@ -486,6 +486,7 @@ UNDEF_KCONFIG_WHITELIST = {
     "SOME_INT",
     "SOME_OTHER_BOOL",
     "SOME_STRING",
+    "STACK_SIZE",  # Used as an example in the Kconfig docs
     "STD_CPP",  # Referenced in CMake comment
     "TEST1",
     "TYPE_BOOLEAN",
