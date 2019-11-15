@@ -29,17 +29,18 @@ EDIT_TIP = "\n\n*Tip: The bot edits this comment instead of posting a new " \
 logger = None
 
 
-def git(*args):
+def git(*args, cwd=None):
     # Helper for running a Git command. Returns the rstrip()ed stdout output.
     # Called like git("diff"). Exits with SystemError (raised by sys.exit()) on
-    # errors.
+    # errors. 'cwd' is the working directory to use (default: current
+    # directory).
 
     git_cmd = ("git",) + args
     git_cmd_s = " ".join(shlex.quote(word) for word in git_cmd)  # For errors
 
     try:
         git_process = subprocess.Popen(
-            git_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            git_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
     except OSError as e:
         err("failed to run '{}': {}".format(git_cmd_s, e))
 
@@ -365,35 +366,22 @@ entries, then bump the 'max_top_items' variable in {}.
         #  - {, e.g. for Python scripts ("CONFIG_FOO_{}_BAR".format(...)")
         #
         #  - *, meant for comments like '#endif /* CONFIG_FOO_* */
-        #
-        # We skip doc/releases, which often references removed symbols.
+
+        defined_syms = get_defined_syms(kconf)
+
+        # Maps each undefined symbol to a list <filename>:<linenr> strings
+        undef_to_locs = collections.defaultdict(list)
 
         # Warning: Needs to work with both --perl-regexp and the 're' module
         regex = r"\bCONFIG_[A-Z0-9_]+\b(?!\s*##|[$@{*])"
 
-        grep_cmd = ["git", "grep", "--line-number", "-I", "--null",
-                    "--perl-regexp", regex,
-                    "--", ":!doc/releases"]
-
-        grep_process = subprocess.Popen(grep_cmd,
-                                        stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE,
-                                        cwd=ZEPHYR_BASE)
-
-        grep_stdout, grep_stderr = grep_process.communicate()
-        # Fail if there's anything on stderr too, so that it doesn't get missed
-        if grep_process.returncode or grep_stderr:
-            self.error("'{}' failed with exit code {} (while searching for "
-                       "Kconfig symbol references)\n\nstdout:\n{}\n\n"
-                       "stderr:\n{}"
-                       .format(" ".join(grep_cmd), grep_process.returncode,
-                               grep_stdout, grep_stderr))
-
-        defined_syms = get_defined_syms(kconf)
-        undef_to_locs = collections.defaultdict(list)
+        # Skip doc/releases, which often references removed symbols
+        grep_stdout = git("grep", "--line-number", "-I", "--null",
+                          "--perl-regexp", regex, "--", ":!/doc/releases",
+                          cwd=ZEPHYR_BASE)
 
         # splitlines() supports various line terminators
-        for grep_line in grep_stdout.decode("utf-8").splitlines():
+        for grep_line in grep_stdout.splitlines():
             path, lineno, line = grep_line.split("\0")
 
             # Extract symbol references (might be more than one) within the
@@ -433,37 +421,24 @@ flagged.
 
 
 def get_defined_syms(kconf):
-    # Returns all defined Kconfig symbols. This is complicated by samples and
-    # tests defining their own Kconfig trees. For those, just grep for
-    # 'config FOO' to find definitions. Doing it "properly" with Kconfiglib is
-    # still useful for the main tree, because some symbols are defined using
-    # preprocessor macros.
+    # Returns a set() with the names of all defined Kconfig symbols (with no
+    # 'CONFIG_' prefix). This is complicated by samples and tests defining
+    # their own Kconfig trees. For those, just grep for 'config FOO' to find
+    # definitions. Doing it "properly" with Kconfiglib is still useful for the
+    # main tree, because some symbols are defined using preprocessor macros.
 
     # Warning: Needs to work with both --extended-regexp and the 're' module
-    regex = "^\s*(menu)?config\s*([A-Z0-9_]+)\s*(#|$)"
+    regex = r"^\s*(menu)?config\s*([A-Z0-9_]+)\s*(#|$)"
 
-    grep_cmd = ["git", "grep", "-I", "-h", "--extended-regexp", regex,
-                "--", ":samples", ":tests"]
+    # Grep samples/ and tests/ for symbol definitions
+    grep_stdout = git("grep", "-I", "-h", "--extended-regexp", regex, "--",
+                      ":samples", ":tests")
 
-    grep_process = subprocess.Popen(grep_cmd,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
-                                    cwd=ZEPHYR_BASE)
-
-    grep_stdout, grep_stderr = grep_process.communicate()
-    # Fail if there's anything on stderr too, so that it doesn't get missed
-    if grep_process.returncode or grep_stderr:
-        self.error("'{}' failed with exit code {} (while searching for "
-                   "Kconfig symbol definitions)\n\nstdout:\n{}\n\n"
-                   "stderr:\n{}"
-                   .format(" ".join(grep_cmd), grep_process.returncode,
-                           grep_stdout, grep_stderr))
-
+    # Start with the symbols from the main Kconfig tree in 'res'
     res = set(sym.name for sym in kconf.unique_defined_syms)
-
-    for def_line in grep_stdout.decode("utf-8").splitlines():
+    # Add the grepped definitions from samples and tests
+    for def_line in grep_stdout.splitlines():
         res.add(re.match(regex, def_line).group(2))
-
     return res
 
 
