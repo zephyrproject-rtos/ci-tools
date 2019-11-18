@@ -669,10 +669,76 @@ class Codeowners(ComplianceTest):
                              "CODEOWNERS file to cover those files")
 
 
+class Nits(ComplianceTest):
+    """
+    Checks various nits in added/modified files. Doesn't check stuff that's
+    already covered by e.g. checkpatch.pl and pylint.
+    """
+    _name = "Nits"
+    _doc = "https://docs.zephyrproject.org/latest/contribute/#coding-style"
+
+    def run(self):
+        self.prepare(GIT_TOP)
+
+        # Loop through added/modified files
+        for fname in git("diff", "--name-only", "--diff-filter=d",
+                         self.commit_range).splitlines():
+            is_kconfig = "Kconfig" in fname
+
+            if is_kconfig:
+                self.check_kconfig_file(fname)
+
+            if fname.endswith((".c", ".cpp", ".h", ".ld", ".py", ".rst",
+                               ".yaml", ".yml")) or is_kconfig:
+                self.check_source_file(fname)
+
+    def check_kconfig_file(self, fname):
+        # Nits related to Kconfig files
+
+        with open(os.path.join(GIT_TOP, fname), encoding="utf-8") as f:
+            contents = f.read()
+
+        # 'Kconfig - yada yada' has a copy-pasted redundant filename at the
+        # start. This probably means all of the header was copy-pasted.
+        if re.match(r"\s*#\s*(K|k)config[\w.-]*\s*-", contents):
+            self.add_failure("""
+Please use this format for the header in '{}' (see
+https://docs.zephyrproject.org/latest/guides/kconfig/index.html#header-comments-and-other-nits):
+
+    # <Overview of symbols defined in the file, preferably in plain English>
+    (Blank line)
+    # Copyright (c) 2019 ...
+    # SPDX-License-Identifier: <License>
+    (Blank line)
+    (Kconfig definitions)
+
+Skip the "Kconfig - " part of the first line, since it's clear that the comment
+is about Kconfig from context. The "# Kconfig - " is what triggers this
+failure.
+""".format(fname))
+
+    def check_source_file(self, fname):
+        # Generic nits related to various source files
+
+        with open(os.path.join(GIT_TOP, fname), encoding="utf-8") as f:
+            contents = f.read()
+
+        if not contents.endswith("\n"):
+            self.add_failure("Missing newline at end of '{}'. Check your text "
+                             "editor settings.".format(fname))
+
+        if contents.startswith("\n"):
+            self.add_failure("Please remove blank lines at start of '{}'"
+                             .format(fname))
+
+        if contents.endswith("\n\n"):
+            self.add_failure("Please remove blank lines at end of '{}'"
+                             .format(fname))
+
+
 class Documentation(ComplianceTest):
     """
     Checks if documentation build has generated any new warnings.
-
     """
     _name = "Documentation"
     _doc = "https://docs.zephyrproject.org/latest/guides/documentation/index.html"
