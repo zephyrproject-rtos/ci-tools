@@ -40,19 +40,22 @@ def git(*args):
     try:
         git_process = subprocess.Popen(
             git_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except FileNotFoundError:
-        sys.exit("git executable not found (when running '{}'). Check that "
-                 "it's in listed in the PATH environment variable"
-                 .format(git_cmd_s))
     except OSError as e:
-        sys.exit("failed to run '{}': {}".format(git_cmd_s, e))
+        err("failed to run '{}': {}".format(git_cmd_s, e))
 
     stdout, stderr = git_process.communicate()
+    stdout = stdout.decode("utf-8")
+    stderr = stderr.decode("utf-8")
     if git_process.returncode or stderr:
-        sys.exit("failed to run '{}': {}".format(
-            git_cmd_s, stdout.decode("utf-8") + stderr.decode("utf-8")))
+        err("""\
+'{}' exited with status {} (note: output on stderr also counts as a failure).
 
-    return stdout.decode("utf-8").rstrip()
+==stdout==
+{}
+==stderr==
+{}""".format(git_cmd_s, git_process.returncode, stdout, stderr))
+
+    return stdout.rstrip()
 
 
 # This ends up as None when we're not running in a Zephyr tree
@@ -1283,7 +1286,10 @@ def main():
 
 
 def err(msg):
-    sys.exit("error: " + msg)
+    cmd = sys.argv[0]  # Empty if missing
+    if cmd:
+        cmd += ": "
+    sys.exit(cmd + "error: " + msg)
 
 
 if __name__ == "__main__":
