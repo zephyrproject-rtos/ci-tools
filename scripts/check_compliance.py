@@ -87,34 +87,22 @@ class MyCase(TestCase):
 
 class ComplianceTest:
     """
-    Main Test class
+    Base class for tests. Inheriting classes should have a run() method and set
+    these class variables:
 
+    name:
+      Test name
+
+    doc:
+      Link to documentation related to what's being tested
+
+    path_hint:
+      The path the test runs itself in. This is just informative and used in
+      the message that gets printed when running the test.
     """
-
-    _name = ""
-    _title = ""
-    _doc = "https://docs.zephyrproject.org/latest/contribute/"
-
-    def __init__(self, suite, commit_range):
-        self.case = None
-        self.suite = suite
-        self.commit_range = commit_range
-        # get() defaults to None if not present
-
-    def prepare(self, where):
-        """
-        Prepare test case
-        :return:
-        """
-        self.case = MyCase(self._name)
+    def __init__(self):
+        self.case = MyCase(self.name)
         self.case.classname = "Guidelines"
-        print("Running {:16} tests in {} ...".format(self._name, where))
-
-    def run(self):
-        """
-        Run testcase
-        :return:
-        """
 
     def error(self, msg):
         """
@@ -159,7 +147,7 @@ class ComplianceTest:
         """
         if not self.case.result:
             # First reported failure
-            self.case.result = Failure(self._name + " issues", "failure")
+            self.case.result = Failure(self.name + " issues", "failure")
             self.case.result._elem.text = msg.rstrip()
         else:
             # If there are multiple Failures, concatenate their messages
@@ -201,11 +189,11 @@ class CheckPatch(ComplianceTest):
     Runs checkpatch and reports found issues
 
     """
-    _name = "checkpatch"
-    _doc = "https://docs.zephyrproject.org/latest/contribute/#coding-style"
+    name = "checkpatch"
+    doc = "https://docs.zephyrproject.org/latest/contribute/#coding-style"
+    path_hint = GIT_TOP
 
     def run(self):
-        self.prepare(GIT_TOP)
         # Default to Zephyr's checkpatch if ZEPHYR_BASE is set
         checkpatch = os.path.join(ZEPHYR_BASE or GIT_TOP, 'scripts',
                                   'checkpatch.pl')
@@ -213,7 +201,7 @@ class CheckPatch(ComplianceTest):
             self.skip(checkpatch + " not found")
 
         # git diff's output doesn't depend on the current (sub)directory
-        diff = subprocess.Popen(('git', 'diff', '%s' % (self.commit_range)),
+        diff = subprocess.Popen(('git', 'diff', COMMIT_RANGE),
                                 stdout=subprocess.PIPE)
         try:
             subprocess.check_output((checkpatch, '--mailback', '--no-tree', '-'),
@@ -235,12 +223,11 @@ class KconfigCheck(ComplianceTest):
     Checks is we are introducing any new warnings/errors with Kconfig,
     for example using undefiend Kconfig variables.
     """
-    _name = "Kconfig"
-    _doc = "https://docs.zephyrproject.org/latest/guides/kconfig/index.html"
+    name = "Kconfig"
+    doc = "https://docs.zephyrproject.org/latest/guides/kconfig/index.html"
+    path_hint = ZEPHYR_BASE
 
     def run(self):
-        self.prepare(ZEPHYR_BASE)
-
         kconf = self.parse_kconfig()
 
         self.check_top_menu_not_too_long(kconf)
@@ -500,11 +487,11 @@ class DeviceTreeCheck(ComplianceTest):
     """
     Runs the dtlib and edtlib test suites in scripts/dts/.
     """
-    _name = "Device tree"
-    _doc = "https://docs.zephyrproject.org/latest/guides/dts/index.html"
+    name = "Device tree"
+    doc = "https://docs.zephyrproject.org/latest/guides/dts/index.html"
+    path_hint = ZEPHYR_BASE
 
     def run(self):
-        self.prepare(ZEPHYR_BASE)
         if not ZEPHYR_BASE:
             self.skip("Not a Zephyr tree (ZEPHYR_BASE unset)")
 
@@ -542,8 +529,9 @@ class Codeowners(ComplianceTest):
     """
     Check if added files have an owner.
     """
-    _name = "Codeowners"
-    _doc  = "https://help.github.com/articles/about-code-owners/"
+    name = "Codeowners"
+    doc = "https://help.github.com/articles/about-code-owners/"
+    path_hint = GIT_TOP
 
     def ls_owned_files(self, codeowners):
         """Returns an OrderedDict mapping git patterns from the CODEOWNERS file
@@ -610,7 +598,6 @@ class Codeowners(ComplianceTest):
         return ret
 
     def run(self):
-        self.prepare(GIT_TOP)
         # TODO: testing an old self.commit range that doesn't end
         # with HEAD is most likely a mistake. Should warn, see
         # https://github.com/zephyrproject-rtos/ci-tools/pull/24
@@ -619,9 +606,9 @@ class Codeowners(ComplianceTest):
             self.skip("CODEOWNERS not available in this repo")
 
         name_changes = git("diff", "--name-only", "--diff-filter=ARCD",
-                            self.commit_range)
+                           COMMIT_RANGE)
 
-        owners_changes = git("diff", "--name-only", self.commit_range,
+        owners_changes = git("diff", "--name-only", COMMIT_RANGE,
                              "--", codeowners)
 
         if not name_changes and not owners_changes:
@@ -637,7 +624,7 @@ class Codeowners(ComplianceTest):
         # however if one is missed then it will always be reported as an
         # Addition instead.
         new_files = git("diff", "--name-only", "--diff-filter=ARC",
-                        self.commit_range).splitlines()
+                        COMMIT_RANGE).splitlines()
         logging.debug("New files %s", new_files)
 
         # Convert to pathlib.Path string representation (e.g.,
@@ -674,14 +661,13 @@ class Documentation(ComplianceTest):
     Checks if documentation build has generated any new warnings.
 
     """
-    _name = "Documentation"
-    _doc = "https://docs.zephyrproject.org/latest/guides/documentation/index.html"
+    name = "Documentation"
+    doc = "https://docs.zephyrproject.org/latest/guides/documentation/index.html"
+    path_hint = os.getcwd()
 
     DOCS_WARNING_FILE = "doc.warnings"
 
     def run(self):
-        self.prepare(os.getcwd())
-
         if os.path.exists(self.DOCS_WARNING_FILE) and os.path.getsize(self.DOCS_WARNING_FILE) > 0:
             with open(self.DOCS_WARNING_FILE, "rb") as docs_warning:
                 self.add_failure(docs_warning.read().decode("utf-8"))
@@ -692,15 +678,14 @@ class GitLint(ComplianceTest):
     Runs gitlint on the commits and finds issues with style and syntax
 
     """
-    _name = "Gitlint"
-    _doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
+    name = "Gitlint"
+    doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
+    path_hint = GIT_TOP
 
     def run(self):
-        self.prepare(GIT_TOP)
-
         # By default gitlint looks for .gitlint configuration only in
         # the current directory
-        proc = subprocess.Popen('gitlint --commits %s' % (self.commit_range),
+        proc = subprocess.Popen('gitlint --commits ' + COMMIT_RANGE,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 shell=True, cwd=GIT_TOP)
 
@@ -717,18 +702,17 @@ class PyLint(ComplianceTest):
     Runs pylint on all .py files, with a limited set of checks enabled. The
     configuration is in the pylintrc file.
     """
-    _name = "pylint"
-    _doc = "https://www.pylint.org/"
+    name = "pylint"
+    doc = "https://www.pylint.org/"
+    path_hint = GIT_TOP
 
     def run(self):
-        self.prepare(GIT_TOP)
-
         # Path to pylint configuration file
         pylintrc = os.path.join(os.path.dirname(__file__), "pylintrc")
 
         # List of files added/modified by the commit(s).
         files = git(
-            "diff", "--name-only", "--diff-filter=d", self.commit_range, "--",
+            "diff", "--name-only", "--diff-filter=d", COMMIT_RANGE, "--",
             # Skip to work around crash in pylint 2.2.2:
             # https://github.com/PyCQA/pylint/issues/2906
             ":!boards/xtensa/intel_s1000_crb/support/create_board_img.py") \
@@ -780,13 +764,12 @@ class License(ComplianceTest):
     Checks for licenses in new files added by the Pull request
 
     """
-    _name = "License"
-    _doc = "https://docs.zephyrproject.org/latest/contribute/#licensing"
+    name = "License"
+    doc = "https://docs.zephyrproject.org/latest/contribute/#licensing"
+    # copyfile() below likely requires that getcwd()==GIT_TOP
+    path_hint = os.getcwd()
 
     def run(self):
-        # copyfile() below likely requires that getcwd()==GIT_TOP
-        self.prepare(os.getcwd())
-
         scancode = "/opt/scancode-toolkit/scancode"
         if not os.path.exists(scancode):
             self.skip("scancode-toolkit not installed")
@@ -794,7 +777,7 @@ class License(ComplianceTest):
         os.makedirs("scancode-files", exist_ok=True)
         # git diff's output doesn't depend on the current (sub)directory
         new_files = git("diff", "--name-only", "--diff-filter=A",
-                        self.commit_range).splitlines()
+                        COMMIT_RANGE).splitlines()
 
         if not new_files:
             return
@@ -881,15 +864,14 @@ class Identity(ComplianceTest):
     """
     Checks if Emails of author and signed-off messages are consistent.
     """
-    _name = "Identity/Emails"
-    _doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
+    name = "Identity/Emails"
+    doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
+    # git rev-list and git log don't depend on the current (sub)directory
+    # unless explicited
+    path_hint = GIT_TOP
 
     def run(self):
-        # git rev-list and git log don't depend on the current
-        # (sub)directory unless explicited.
-        self.prepare(GIT_TOP)
-
-        for shaidx in get_shas(self.commit_range):
+        for shaidx in get_shas(COMMIT_RANGE):
             commit = git("log", "--decorate=short", "-n 1", shaidx)
             signed = []
             author = ""
@@ -951,11 +933,11 @@ def set_pending():
     # Sets 'pending' status for all tests for the commit given by --sha
 
     for testcase in ComplianceTest.__subclasses__():
-        print("Creating pending status for " + testcase._name)
+        print("Creating pending status for " + testcase.name)
         github_commit.create_status(
-            'pending', testcase._doc,
+            'pending', testcase.doc,
             'Run in progress (build no. {})'.format(build_number),
-            testcase._name)
+            testcase.name)
 
 def report_test_results_to_github(suite):
     # Reports test results to Github.
@@ -964,7 +946,7 @@ def report_test_results_to_github(suite):
 
     print("reporting results to GitHub")
 
-    name2doc = {testcase._name: testcase._doc
+    name2doc = {testcase.name: testcase.doc
                 for testcase in ComplianceTest.__subclasses__()}
 
     n_failures = 0
@@ -1170,19 +1152,20 @@ def _main(args):
     # The "real" main(), which is wrapped to catch exceptions and report them
     # to GitHub. Returns the number of test failures.
 
+    # The commit range passed in --commit, e.g. "HEAD~3"
+    global COMMIT_RANGE
+    COMMIT_RANGE = args.commits
+
     init_logs(args.loglevel)
 
     if args.list:
         for testcase in ComplianceTest.__subclasses__():
-            print(testcase._name)
+            print(testcase.name)
         return 0
 
     if args.status:
         set_pending()
         return 0
-
-    if not args.commits:
-        err("No commit range given")
 
     # Load saved test results from an earlier run, if requested
     if args.previous_run:
@@ -1204,15 +1187,21 @@ def _main(args):
         suite = TestSuite("Compliance")
 
     for testcase in ComplianceTest.__subclasses__():
-        test = testcase(suite, args.commits)
-        if args.module:
-            if test._name not in args.module:
-                continue
-        elif test._name in args.exclude_module:
-            print("Skipping " + test._name)
+        # "Modules" and "testcases" are the same thing. Better flags would have
+        # been --tests and --exclude-tests or the like, but it's awkward to
+        # change now.
+
+        if args.module and testcase.name not in args.module:
             continue
 
+        if testcase.name in args.exclude_module:
+            print("Skipping " + testcase.name)
+            continue
+
+        test = testcase()
         try:
+            print("Running {:16} tests in {} ..."
+                  .format(test.name, test.path_hint))
             test.run()
         except EndTest:
             pass
