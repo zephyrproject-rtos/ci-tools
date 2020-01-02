@@ -684,20 +684,21 @@ class Nits(ComplianceTest):
             is_kconfig = "Kconfig" in fname
 
             if is_kconfig:
-                self.check_kconfig_file(fname)
+                self.check_kconfig_header(fname)
+                self.check_redundant_zephyr_source(fname)
 
             if fname.endswith((".c", ".cpp", ".h", ".ld", ".py", ".rst",
                                ".yaml", ".yml")) or is_kconfig:
                 self.check_source_file(fname)
 
-    def check_kconfig_file(self, fname):
-        # Nits related to Kconfig files
+    def check_kconfig_header(self, fname):
+        # Checks for a spammy copy-pasted header format
 
         with open(os.path.join(GIT_TOP, fname), encoding="utf-8") as f:
             contents = f.read()
 
         # 'Kconfig - yada yada' has a copy-pasted redundant filename at the
-        # start. This probably means all of the header was copy-pasted.
+        # top. This probably means all of the header was copy-pasted.
         if re.match(r"\s*#\s*(K|k)config[\w.-]*\s*-", contents):
             self.add_failure("""
 Please use this format for the header in '{}' (see
@@ -714,6 +715,22 @@ Skip the "Kconfig - " part of the first line, since it's clear that the comment
 is about Kconfig from context. The "# Kconfig - " is what triggers this
 failure.
 """.format(fname))
+
+    def check_redundant_zephyr_source(self, fname):
+        # Checks for 'source "$(ZEPHYR_BASE)/Kconfig[.zephyr]"', which can be
+        # be simplified to 'source "Kconfig[.zephyr]"'
+
+        with open(os.path.join(GIT_TOP, fname), encoding="utf-8") as f:
+            # Look for e.g. rsource as well, for completeness
+            match = re.search(
+                r'^\s*(?:o|r|or)?source\s*"\$\(?ZEPHYR_BASE\)?/(Kconfig(?:\.zephyr)?)"',
+                f.read(), re.MULTILINE)
+
+            if match:
+                self.add_failure("""
+Redundant 'source "$(ZEPHYR_BASE)/{0}" in '{1}'. Just do 'source "{0}"'
+instead. The $srctree environment variable already points to the Zephyr root,
+and all 'source's are relative to it.""".format(match.group(1), fname))
 
     def check_source_file(self, fname):
         # Generic nits related to various source files
