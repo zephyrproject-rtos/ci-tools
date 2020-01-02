@@ -664,15 +664,14 @@ class Nits(ComplianceTest):
     Checks various nits in added/modified files. Doesn't check stuff that's
     already covered by e.g. checkpatch.pl and pylint.
     """
-    _name = "Nits"
-    _doc = "https://docs.zephyrproject.org/latest/contribute/#coding-style"
+    name = "Nits"
+    doc = "https://docs.zephyrproject.org/latest/contribute/#coding-style"
+    path_hint = GIT_TOP
 
     def run(self):
-        self.prepare(GIT_TOP)
-
         # Loop through added/modified files
         for fname in git("diff", "--name-only", "--diff-filter=d",
-                         self.commit_range).splitlines():
+                         COMMIT_RANGE).splitlines():
             is_kconfig = "Kconfig" in fname
 
             if is_kconfig:
