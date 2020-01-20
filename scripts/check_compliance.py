@@ -432,7 +432,7 @@ def get_defined_syms(kconf):
 
     # Grep samples/ and tests/ for symbol definitions
     grep_stdout = git("grep", "-I", "-h", "--extended-regexp", regex, "--",
-                      ":samples", ":tests")
+                      ":samples", ":tests", cwd=ZEPHYR_BASE)
 
     # Start with the symbols from the main Kconfig tree in 'res'
     res = set(sym.name for sym in kconf.unique_defined_syms)
@@ -802,7 +802,8 @@ class PyLint(ComplianceTest):
 
     def run(self):
         # Path to pylint configuration file
-        pylintrc = os.path.join(os.path.dirname(__file__), "pylintrc")
+        pylintrc = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                                "pylintrc"))
 
         # List of files added/modified by the commit(s).
         files = git(
