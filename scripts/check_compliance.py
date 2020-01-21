@@ -286,6 +286,10 @@ class KconfigCheck(ComplianceTest):
         os.environ['DEVICETREE_CONF'] = "dummy"
         os.environ['DTS_POST_CPP'] = 'dummy'
 
+        # Older name for DEVICETREE_CONF, for compatibility with older Zephyr
+        # versions that don't have the renaming
+        os.environ["GENERATED_DTS_BOARD_CONF"] = "dummy"
+
         # For multi repo support
         self.get_modules(os.path.join(tempfile.gettempdir(), "Kconfig.modules"))
 
