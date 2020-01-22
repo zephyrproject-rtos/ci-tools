@@ -8,7 +8,6 @@ future==0.17.1
 gitlint==0.10.0
 idna==2.7
 junitparser==1.2.2
-kconfiglib==10.30.0
 PyGithub==1.43.3
 PyJWT==1.7.1
 python-dateutil==2.7.5
