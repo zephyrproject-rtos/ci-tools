@@ -718,17 +718,20 @@ class Nits(ComplianceTest):
         # Loop through added/modified files
         for fname in git("diff", "--name-only", "--diff-filter=d",
                          COMMIT_RANGE).splitlines():
-            is_kconfig = "Kconfig" in fname
-
-            if is_kconfig:
+            if "Kconfig" in fname:
                 self.check_kconfig_header(fname)
                 self.check_redundant_zephyr_source(fname)
 
             if fname.startswith("dts/bindings/"):
                 self.check_redundant_document_separator(fname)
 
-            if fname.endswith((".c", ".cpp", ".h", ".ld", ".py", ".rst",
-                               ".yaml", ".yml")) or is_kconfig:
+            if fname.endswith((".c", ".conf", ".cpp", ".dts", ".overlay",
+                               ".h", ".ld", ".py", ".rst", ".txt", ".yaml",
+                               ".yml")) or \
+               "Kconfig" in fname or \
+               "defconfig" in fname or \
+               fname == "README":
+
                 self.check_source_file(fname)
 
     def check_kconfig_header(self, fname):
