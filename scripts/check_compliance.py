@@ -724,6 +724,9 @@ class Nits(ComplianceTest):
                 self.check_kconfig_header(fname)
                 self.check_redundant_zephyr_source(fname)
 
+            if fname.startswith("dts/bindings/"):
+                self.check_redundant_document_separator(fname)
+
             if fname.endswith((".c", ".cpp", ".h", ".ld", ".py", ".rst",
                                ".yaml", ".yml")) or is_kconfig:
                 self.check_source_file(fname)
@@ -768,6 +771,15 @@ failure.
 Redundant 'source "$(ZEPHYR_BASE)/{0}" in '{1}'. Just do 'source "{0}"'
 instead. The $srctree environment variable already points to the Zephyr root,
 and all 'source's are relative to it.""".format(match.group(1), fname))
+
+    def check_redundant_document_separator(self, fname):
+        # Looks for redundant '...' document separators in bindings
+
+        with open(os.path.join(GIT_TOP, fname), encoding="utf-8") as f:
+            if re.search(r"^\.\.\.", f.read(), re.MULTILINE):
+                self.add_failure(f"""\
+Redundant '...' document separator in {fname}. Binding YAML files are never
+concatenated together, so no document separators are needed.""")
 
     def check_source_file(self, fname):
         # Generic nits related to various source files
