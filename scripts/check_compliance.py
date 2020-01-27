@@ -28,6 +28,9 @@ EDIT_TIP = "\n\n*Tip: The bot edits this comment instead of posting a new " \
 
 logger = None
 
+# This ends up as None when we're not running in a Zephyr tree
+ZEPHYR_BASE = os.environ.get('ZEPHYR_BASE')
+
 
 def git(*args, cwd=None):
     # Helper for running a Git command. Returns the rstrip()ed stdout output.
@@ -57,13 +60,6 @@ def git(*args, cwd=None):
 {}""".format(git_cmd_s, git_process.returncode, stdout, stderr))
 
     return stdout.rstrip()
-
-
-# This ends up as None when we're not running in a Zephyr tree
-ZEPHYR_BASE = os.environ.get('ZEPHYR_BASE')
-
-# The absolute path of the top-level git directory
-GIT_TOP = git("rev-parse", "--show-toplevel")
 
 
 def get_shas(refspec):
@@ -103,6 +99,12 @@ class ComplianceTest:
     path_hint:
       The path the test runs itself in. This is just informative and used in
       the message that gets printed when running the test.
+
+      The magic string "<git-top>" refers to the top-level repository
+      directory. This avoids running 'git' to find the top-level directory
+      before main() runs (class variable assignments run when the 'class ...'
+      statement runs). That avoids swallowing errors, because main() reports
+      them to GitHub.
     """
     def __init__(self):
         self.case = MyCase(self.name)
@@ -195,7 +197,7 @@ class CheckPatch(ComplianceTest):
     """
     name = "checkpatch"
     doc = "https://docs.zephyrproject.org/latest/contribute/#coding-style"
-    path_hint = GIT_TOP
+    path_hint = "<git-top>"
 
     def run(self):
         # Default to Zephyr's checkpatch if ZEPHYR_BASE is set
@@ -580,7 +582,7 @@ class Codeowners(ComplianceTest):
     """
     name = "Codeowners"
     doc = "https://help.github.com/articles/about-code-owners/"
-    path_hint = GIT_TOP
+    path_hint = "<git-top>"
 
     def ls_owned_files(self, codeowners):
         """Returns an OrderedDict mapping git patterns from the CODEOWNERS file
@@ -712,7 +714,7 @@ class Nits(ComplianceTest):
     """
     name = "Nits"
     doc = "https://docs.zephyrproject.org/latest/contribute/#coding-style"
-    path_hint = GIT_TOP
+    path_hint = "<git-top>"
 
     def run(self):
         # Loop through added/modified files
@@ -823,7 +825,7 @@ class GitLint(ComplianceTest):
     """
     name = "Gitlint"
     doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
-    path_hint = GIT_TOP
+    path_hint = "<git-top>"
 
     def run(self):
         # By default gitlint looks for .gitlint configuration only in
@@ -847,7 +849,7 @@ class PyLint(ComplianceTest):
     """
     name = "pylint"
     doc = "https://www.pylint.org/"
-    path_hint = GIT_TOP
+    path_hint = "<git-top>"
 
     def run(self):
         # Path to pylint configuration file
@@ -1012,7 +1014,7 @@ class Identity(ComplianceTest):
     doc = "https://docs.zephyrproject.org/latest/contribute/#commit-guidelines"
     # git rev-list and git log don't depend on the current (sub)directory
     # unless explicited
-    path_hint = GIT_TOP
+    path_hint = "<git-top>"
 
     def run(self):
         for shaidx in get_shas(COMMIT_RANGE):
@@ -1296,6 +1298,11 @@ def _main(args):
     # The "real" main(), which is wrapped to catch exceptions and report them
     # to GitHub. Returns the number of test failures.
 
+    # The absolute path of the top-level git directory. Initialize it here so
+    # that issues running Git can be reported to GitHub.
+    global GIT_TOP
+    GIT_TOP = git("rev-parse", "--show-toplevel")
+
     # The commit range passed in --commit, e.g. "HEAD~3"
     global COMMIT_RANGE
     COMMIT_RANGE = args.commits
@@ -1344,8 +1351,8 @@ def _main(args):
 
         test = testcase()
         try:
-            print("Running {:16} tests in {} ..."
-                  .format(test.name, test.path_hint))
+            print(f"Running {test.name:16} tests in "
+                  f"{GIT_TOP if test.path_hint == '<git-top>' else test.path_hint} ...")
             test.run()
         except EndTest:
             pass
