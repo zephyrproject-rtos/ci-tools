@@ -235,6 +235,7 @@ class KconfigCheck(ComplianceTest):
         kconf = self.parse_kconfig()
 
         self.check_top_menu_not_too_long(kconf)
+        self.check_no_pointless_menuconfigs(kconf)
         self.check_no_undef_within_kconfig(kconf)
         self.check_no_undef_outside_kconfig(kconf)
 
@@ -272,6 +273,9 @@ class KconfigCheck(ComplianceTest):
             self.error(kconfig_path + " not found")
 
         sys.path.insert(0, kconfig_path)
+        # Import globally so that e.g. kconfiglib.Symbol can be referenced in
+        # tests
+        global kconfiglib
         import kconfiglib
 
         # Look up Kconfig files relative to ZEPHYR_BASE
@@ -325,6 +329,32 @@ Expected no more than {} potentially visible items (items with prompts) in the
 top-level Kconfig menu, found {} items. If you're deliberately adding new
 entries, then bump the 'max_top_items' variable in {}.
 """.format(max_top_items, n_top_items, __file__))
+
+    def check_no_pointless_menuconfigs(self, kconf):
+        # Checks that there are no pointless 'menuconfig' symbols without
+        # children in the Kconfig files
+
+        bad_mconfs = []
+        for node in kconf.node_iter():
+            # 'kconfiglib' is global
+            # pylint: disable=undefined-variable
+
+            # Avoid flagging empty regular menus and choices, in case people do
+            # something with 'osource' (could happen for 'menuconfig' symbols
+            # too, though it's less likely)
+            if node.is_menuconfig and not node.list and \
+               isinstance(node.item, kconfiglib.Symbol):
+
+                bad_mconfs.append(node)
+
+        if bad_mconfs:
+            self.add_failure("""\
+Found pointless 'menuconfig' symbols without children. Use regular 'config'
+symbols instead. See
+https://docs.zephyrproject.org/latest/guides/kconfig/tips.html#menuconfig-symbols.
+
+""" + "\n".join(f"{node.item.name:35} {node.filename}:{node.linenr}"
+                for node in bad_mconfs))
 
     def check_no_undef_within_kconfig(self, kconf):
         """
