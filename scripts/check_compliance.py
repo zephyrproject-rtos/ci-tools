@@ -39,25 +39,24 @@ def git(*args, cwd=None):
     # directory).
 
     git_cmd = ("git",) + args
-    git_cmd_s = " ".join(shlex.quote(word) for word in git_cmd)  # For errors
-
     try:
         git_process = subprocess.Popen(
             git_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
     except OSError as e:
-        err("failed to run '{}': {}".format(git_cmd_s, e))
+        err(f"failed to run '{cmd2str(git_cmd)}': {e}")
 
     stdout, stderr = git_process.communicate()
     stdout = stdout.decode("utf-8")
     stderr = stderr.decode("utf-8")
     if git_process.returncode or stderr:
-        err("""\
-'{}' exited with status {} (note: output on stderr also counts as a failure).
+        err(f"""\
+'{cmd2str(git_cmd)}' exited with status {git_process.returncode} and/or wrote
+to stderr.
 
 ==stdout==
-{}
+{stdout}
 ==stderr==
-{}""".format(git_cmd_s, git_process.returncode, stdout, stderr))
+{stderr}""")
 
     return stdout.rstrip()
 
@@ -872,7 +871,7 @@ class PyLint(ComplianceTest):
             return
 
         pylintcmd = ["pylint", "--rcfile=" + pylintrc] + py_files
-        logger.info(" ".join(shlex.quote(word) for word in pylintcmd))
+        logger.info(cmd2str(pylintcmd))
         try:
             # Run pylint on added/modified Python files
             process = subprocess.Popen(
@@ -880,11 +879,8 @@ class PyLint(ComplianceTest):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 cwd=GIT_TOP)
-        except FileNotFoundError:
-            self.error("pylint not found. Check that the directory it's in is "
-                       "listed in the PATH environment variable.")
         except OSError as e:
-            self.error("Failed to run pylint: " + str(e))
+            self.error(f"Failed to run {cmd2str(pylintcmd)}: {e}")
 
         stdout, stderr = process.communicate()
         if process.returncode or stderr:
@@ -1420,6 +1416,13 @@ def main():
         raise
 
     sys.exit(n_fails)
+
+
+def cmd2str(cmd):
+    # Formats the command-line arguments in the iterable 'cmd' into a string,
+    # for error messages and the like
+
+    return " ".join(shlex.quote(word) for word in cmd)
 
 
 def err(msg):
