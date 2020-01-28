@@ -536,6 +536,9 @@ class DeviceTreeCheck(ComplianceTest):
             # which raises SystemExit. Let any errors in the test scripts
             # themselves trickle through and turn into an internal CI error.
             self.add_failure(str(e))
+        except Exception as e:
+            # Report other exceptions as an internal test failure
+            self.error(str(e))
         finally:
             # Restore working directory
             os.chdir(old_dir)
