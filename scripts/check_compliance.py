@@ -427,19 +427,18 @@ def get_defined_syms(kconf):
     # definitions. Doing it "properly" with Kconfiglib is still useful for the
     # main tree, because some symbols are defined using preprocessor macros.
 
-    # Warning: Needs to work with both --extended-regexp and the 're' module
-    regex = r"^\s*(menu)?config\s*([A-Z0-9_]+)\s*(#|$)"
+    # Warning: Needs to work with both --perl-regexp and the 're' module.
+    # (?:...) is a non-capturing group.
+    regex = r"^\s*(?:menu)?config\s*([A-Z0-9_]+)\s*(?:#|$)"
 
     # Grep samples/ and tests/ for symbol definitions
-    grep_stdout = git("grep", "-I", "-h", "--extended-regexp", regex, "--",
+    grep_stdout = git("grep", "-I", "-h", "--perl-regexp", regex, "--",
                       ":samples", ":tests", cwd=ZEPHYR_BASE)
 
-    # Start with the symbols from the main Kconfig tree in 'res'
-    res = set(sym.name for sym in kconf.unique_defined_syms)
-    # Add the grepped definitions from samples and tests
-    for def_line in grep_stdout.splitlines():
-        res.add(re.match(regex, def_line).group(2))
-    return res
+    # Symbols from the main Kconfig tree + grepped definitions from samples and
+    # tests
+    return set([sym.name for sym in kconf.unique_defined_syms]
+               + re.findall(regex, grep_stdout, re.MULTILINE))
 
 
 # Many of these are symbols used as examples. Note that the list is sorted
