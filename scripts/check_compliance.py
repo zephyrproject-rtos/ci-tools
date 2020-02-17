@@ -1073,10 +1073,14 @@ def init_logs(cli_arg):
                  logging.getLevelName(logger.getEffectiveLevel()))
 
 
-def set_pending():
+def set_pending(exclude):
     # Sets 'pending' status for all tests for the commit given by --sha
 
     for testcase in ComplianceTest.__subclasses__():
+        if testcase.name in exclude:
+            print("Skipping " + testcase.name)
+            continue
+
         print("Creating pending status for " + testcase.name)
         github_commit.create_status(
             'pending', testcase.doc,
@@ -1313,7 +1317,7 @@ def _main(args):
         return 0
 
     if args.status:
-        set_pending()
+        set_pending(args.exclude_module)
         return 0
 
     # Load saved test results from an earlier run, if requested
