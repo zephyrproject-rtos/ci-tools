@@ -782,7 +782,7 @@ def init_logs(cli_arg):
 
 
 
-def set_status(repo, sha):
+def set_status(repo, sha, exclude_modules=[]):
     """
     Set status on Github
     :param repo:  repoistory name
@@ -799,6 +799,8 @@ def set_status(repo, sha):
     commit = repo.get_commit(sha)
     for testcase in ComplianceTest.__subclasses__():
         test = testcase(None, "")
+        if test._name in exclude_modules:
+            continue
         print("Creating status for %s" % (test._name))
         commit.create_status('pending',
                              '%s' % test._doc,
@@ -962,7 +964,7 @@ def main():
         sys.exit(0)
 
     if args.status and args.sha is not None and args.repo:
-        set_status(args.repo, args.sha)
+        set_status(args.repo, args.sha, args.exclude_module)
         sys.exit(0)
 
     if not args.commits:
