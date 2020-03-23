@@ -1037,6 +1037,8 @@ class Identity(ComplianceTest):
                 sha, author)
             error2 = "%s: author email (%s) does not follow the syntax: First Last <email>." % (
                 sha, author)
+            error3 = "%s: author email (%s) must be a real email and cannot end in @users.noreply.github.com" % (
+                sha, author)
             failure = None
             if author not in signed:
                 failure = error1
@@ -1047,6 +1049,8 @@ class Identity(ComplianceTest):
                     failure = error2
                 else:
                     failure = failure + "\n" + error2
+            elif parsed_addr[1].endswith("@users.noreply.github.com"):
+                failure = error3
 
             if failure:
                 self.add_failure(failure)
