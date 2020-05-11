@@ -218,7 +218,7 @@ def main():
                 "area": "Testsuite",
                 "regex" : ["^subsys/testsuite"],
                 "counter": 0,
-                "labels": ["area: Testing Suite"]
+                "labels": ["area: Test Framework"]
                 },
             {
                 "area": "Settings",
