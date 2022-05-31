@@ -237,6 +237,7 @@ class KconfigCheck(ComplianceTest):
 
         self.check_top_menu_not_too_long(kconf)
         self.check_no_pointless_menuconfigs(kconf)
+        self.check_no_duplicated_deps(kconf)
         self.check_no_undef_within_kconfig(kconf)
         self.check_no_undef_outside_kconfig(kconf)
 
@@ -360,6 +361,35 @@ https://docs.zephyrproject.org/latest/guides/kconfig/tips.html#menuconfig-symbol
 
 """ + "\n".join(f"{node.item.name:35} {node.filename}:{node.linenr}"
                 for node in bad_mconfs))
+
+    def check_no_duplicated_deps(self, kconf):
+        # Checks that there are no duplicated direct dependencies, e.g. a
+        # 'depends on FOO' on a symbol defined within an 'if FOO'. Duplicated
+        # dependencies make changes harder to get right, and make the generated
+        # Kconfig documentation uglier.
+
+        # 'kconfiglib' is global
+        # pylint: disable=undefined-variable
+
+        for node in kconf.node_iter():
+            # Use the string representation of dependencies so that e.g. a
+            # duplicated !FOO will be caught despite being a different
+            # (NOT, <FOO>) tuple.
+            deps = map(kconfiglib.expr_str,
+                       kconfiglib.split_expr(node.dep, kconfiglib.AND))
+
+            for dep, count in collections.Counter(deps).items():
+                if count > 1:
+                    self.add_failure(f"""\
+Duplicated {dep} dependency on symbol/choice/menu/comment at
+{node.filename}:{node.linenr}:
+
+{node}
+
+Jump to the item in the menuconfig/guiconfig interface (with '/') and check the
+'included via ...' path to figure out where the redundant dependency is coming
+from. You might have an 'if FOO' within an 'if FOO', or a 'depends on FOO'
+within an 'if FOO'.""")
 
     def check_no_undef_within_kconfig(self, kconf):
         """
